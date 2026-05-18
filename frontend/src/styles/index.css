@@ -4,8 +4,24 @@
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+  background-image:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 32rem),
+    linear-gradient(180deg, #f8fafc 0%, #eef6ff 46%, #f8fafc 100%);
+  min-height: 100vh;
 }
 
 .panel {
-  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  @apply rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm shadow-slate-200/60;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.field {
+  @apply mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100;
 }

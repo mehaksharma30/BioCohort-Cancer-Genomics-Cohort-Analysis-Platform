@@ -37,7 +37,7 @@ export type Cohort = {
 export type IngestionJob = {
   job_id: string;
   source: string;
-  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_FALLBACK' | 'FAILED' | string;
   records_fetched: number;
   records_inserted: number;
   raw_object_key?: string;

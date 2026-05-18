@@ -40,6 +40,20 @@ Go API Gateway / BFF :8080
 - Calculates cohort quality scores from missing and invalid metadata
 - Provides a complete React dashboard that calls only the API gateway
 
+## UI/UX Highlights
+
+- Enterprise healthcare analytics dashboard with polished React, Tailwind, Recharts, and responsive layouts.
+- Reusable app shell, page headers, status badges, stat cards, chart cards, filter pills, empty states, and skeleton loading states.
+- Ingestion fallback state for external GDC/API failures so demos continue with seeded public TCGA metadata.
+- Cohort query preview that shows selected filters before saving a reproducible analysis-ready cohort.
+- Visual data quality score card with color-coded completeness status and metric cards.
+
+## Reliability Fix
+
+The NCI GDC API can return clinical numeric fields as decimals, for example `24.0` for `days_to_last_follow_up`. The ingestion service now parses raw GDC clinical numbers as nullable decimals, converts them safely to nullable PostgreSQL integers, and handles missing or null diagnosis fields defensively.
+
+If external GDC ingestion fails because the public API is unavailable or its schema changes, BioCohort marks the job as `COMPLETED_WITH_FALLBACK` when seeded TCGA demo data remains available. This keeps the dashboard, cohort builder, analytics, and quality report workflows usable for local demos.
+
 ## Local Setup
 
 Prerequisites: Docker, Docker Compose, Make, Node 20 and Go 1.22 for local non-container builds.
@@ -120,11 +134,11 @@ Core tables:
 
 Add screenshots after running locally:
 
-- Dashboard overview
-- Ingestion job history
-- Cohort builder
-- Cohort analytics detail
-- Quality report
+- Dashboard: executive scientific overview with platform pipeline and service cards
+- Ingestion: GDC job history, fallback status, and raw payload archive visibility
+- Cohort Builder: card-based query form with live filter preview
+- Cohort Detail: cohort-level distributions and analysis-ready dataset checks
+- Quality Report: visual score card and validation metrics
 
 ## Kubernetes
 

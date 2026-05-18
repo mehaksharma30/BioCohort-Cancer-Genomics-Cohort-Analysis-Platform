@@ -1,5 +1,5 @@
 import { Route, Routes } from 'react-router-dom';
-import Navbar from './components/Navbar';
+import AppShell from './components/AppShell';
 import Dashboard from './pages/Dashboard';
 import Ingestion from './pages/Ingestion';
 import CohortBuilder from './pages/CohortBuilder';
@@ -8,9 +8,7 @@ import QualityReport from './pages/QualityReport';
 
 export default function App() {
   return (
-    <div className="min-h-screen">
-      <Navbar />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <AppShell>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/ingestion" element={<Ingestion />} />
@@ -18,7 +16,6 @@ export default function App() {
           <Route path="/cohorts/:id" element={<CohortDetail />} />
           <Route path="/cohorts/:id/quality" element={<QualityReport />} />
         </Routes>
-      </main>
-    </div>
+    </AppShell>
   );
 }

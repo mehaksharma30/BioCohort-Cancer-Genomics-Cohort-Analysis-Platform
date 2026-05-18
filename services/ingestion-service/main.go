@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,12 +49,12 @@ type gdcCase struct {
 		Gender string `json:"gender"`
 	} `json:"demographic"`
 	Diagnoses []struct {
-		AgeAtDiagnosis        *int   `json:"age_at_diagnosis"`
-		VitalStatus           string `json:"vital_status"`
-		DaysToDeath           *int   `json:"days_to_death"`
-		DaysToLastFollowUp    *int   `json:"days_to_last_follow_up"`
-		PrimaryDiagnosis      string `json:"primary_diagnosis"`
-		ClassificationOfTumor string `json:"classification_of_tumor"`
+		AgeAtDiagnosis        *float64 `json:"age_at_diagnosis"`
+		VitalStatus           string   `json:"vital_status"`
+		DaysToDeath           *float64 `json:"days_to_death"`
+		DaysToLastFollowUp    *float64 `json:"days_to_last_follow_up"`
+		PrimaryDiagnosis      string   `json:"primary_diagnosis"`
+		ClassificationOfTumor string   `json:"classification_of_tumor"`
 	} `json:"diagnoses"`
 	Samples []struct {
 		SampleID   string `json:"sample_id"`
@@ -188,7 +189,13 @@ func (s *service) startJob(w http.ResponseWriter, r *http.Request) {
 func (s *service) runJob(ctx context.Context, jobID string) {
 	raw, cases, err := fetchGDC(ctx)
 	if err != nil {
-		msg := "GDC fetch failed; seeded fallback data remains available: " + err.Error()
+		msg := "External GDC ingestion failed, but seeded TCGA demo data remains available."
+		if s.seededDataAvailable(ctx) {
+			_, _ = s.db.Exec(ctx, `UPDATE ingestion_jobs SET status='COMPLETED_WITH_FALLBACK', records_fetched=0, records_inserted=0, error_message=$2, completed_at=NOW() WHERE job_id=$1`, jobID, msg)
+			log.Printf("%s detail: %v", msg, err)
+			return
+		}
+		msg = "External GDC ingestion failed and no fallback demo data is available."
 		_, _ = s.db.Exec(ctx, `UPDATE ingestion_jobs SET status='FAILED', error_message=$2, completed_at=NOW() WHERE job_id=$1`, jobID, msg)
 		log.Print(msg)
 		return
@@ -232,8 +239,8 @@ func fetchGDC(ctx context.Context) ([]byte, []gdcCase, error) {
 	if resp.StatusCode >= 300 {
 		return raw, nil, fmt.Errorf("gdc returned status %d", resp.StatusCode)
 	}
-	var parsed gdcResponse
-	if err := json.Unmarshal(raw, &parsed); err != nil {
+	parsed, err := parseGDCResponse(raw)
+	if err != nil {
 		return raw, nil, err
 	}
 	if len(parsed.Data.Hits) == 0 {
@@ -262,7 +269,7 @@ func (s *service) insertCases(ctx context.Context, cases []gdcCase) (int, error)
 		}
 		tag, err := tx.Exec(ctx, `INSERT INTO cases (case_id, project_id, submitter_id, primary_site, disease_type, gender, age_at_diagnosis, vital_status, days_to_death, days_to_last_follow_up)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-			ON CONFLICT (case_id) DO UPDATE SET project_id=EXCLUDED.project_id, submitter_id=EXCLUDED.submitter_id, primary_site=EXCLUDED.primary_site, disease_type=EXCLUDED.disease_type, gender=EXCLUDED.gender, age_at_diagnosis=EXCLUDED.age_at_diagnosis, vital_status=EXCLUDED.vital_status`,
+			ON CONFLICT (case_id) DO UPDATE SET project_id=EXCLUDED.project_id, submitter_id=EXCLUDED.submitter_id, primary_site=EXCLUDED.primary_site, disease_type=EXCLUDED.disease_type, gender=EXCLUDED.gender, age_at_diagnosis=EXCLUDED.age_at_diagnosis, vital_status=EXCLUDED.vital_status, days_to_death=EXCLUDED.days_to_death, days_to_last_follow_up=EXCLUDED.days_to_last_follow_up`,
 			c.CaseID, c.Project.ProjectID, c.SubmitterID, c.PrimarySite, c.DiseaseType, nullable(c.Demographic.Gender), diagnosis.age, nullable(diagnosis.vital), diagnosis.death, diagnosis.followUp)
 		if err != nil {
 			return 0, err
@@ -283,7 +290,7 @@ func (s *service) insertCases(ctx context.Context, cases []gdcCase) (int, error)
 }
 
 type diag struct {
-	age, death, followUp *int
+	age, death, followUp sql.NullInt64
 	vital                string
 }
 
@@ -292,7 +299,31 @@ func firstDiagnosis(c gdcCase) diag {
 		return diag{}
 	}
 	d := c.Diagnoses[0]
-	return diag{age: d.AgeAtDiagnosis, death: d.DaysToDeath, followUp: d.DaysToLastFollowUp, vital: d.VitalStatus}
+	return diag{age: floatToNullInt(d.AgeAtDiagnosis), death: floatToNullInt(d.DaysToDeath), followUp: floatToNullInt(d.DaysToLastFollowUp), vital: d.VitalStatus}
+}
+
+func parseGDCResponse(raw []byte) (gdcResponse, error) {
+	var parsed gdcResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return parsed, err
+	}
+	return parsed, nil
+}
+
+func floatToNullInt(v *float64) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{Valid: false}
+	}
+	return sql.NullInt64{Int64: int64(*v), Valid: true}
+}
+
+func (s *service) seededDataAvailable(ctx context.Context) bool {
+	var count int
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM cases`).Scan(&count); err != nil {
+		log.Printf("fallback availability check failed: %v", err)
+		return false
+	}
+	return count > 0
 }
 
 func (s *service) jobs(w http.ResponseWriter, r *http.Request) {
