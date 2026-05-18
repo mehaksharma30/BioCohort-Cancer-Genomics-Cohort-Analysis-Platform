@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: quality-service, namespace: biocohort }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: quality-service } }
+  template:
+    metadata: { labels: { app: quality-service } }
+    spec:
+      containers:
+        - name: quality-service
+          image: biocohort/quality-service:latest
+          ports: [{ containerPort: 8084 }]
+          envFrom:
+            - configMapRef: { name: biocohort-config }
+            - secretRef: { name: biocohort-secrets }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: quality-service, namespace: biocohort }
+spec:
+  selector: { app: quality-service }
+  ports: [{ port: 8084, targetPort: 8084 }]

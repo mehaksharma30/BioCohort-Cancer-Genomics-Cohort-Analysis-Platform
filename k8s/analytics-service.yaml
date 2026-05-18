@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: analytics-service, namespace: biocohort }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: analytics-service } }
+  template:
+    metadata: { labels: { app: analytics-service } }
+    spec:
+      containers:
+        - name: analytics-service
+          image: biocohort/analytics-service:latest
+          ports: [{ containerPort: 8083 }]
+          envFrom:
+            - configMapRef: { name: biocohort-config }
+            - secretRef: { name: biocohort-secrets }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: analytics-service, namespace: biocohort }
+spec:
+  selector: { app: analytics-service }
+  ports: [{ port: 8083, targetPort: 8083 }]

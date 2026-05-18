@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: biocohort
+      POSTGRES_USER: biocohort
+      POSTGRES_PASSWORD: biocohort
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biocohort -d biocohort"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: biocohort
+      MINIO_ROOT_PASSWORD: biocohort123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-05-09T17-04-24Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 biocohort biocohort123 && mc mb -p local/raw-ingestion || true"]
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: services/ingestion-service/Dockerfile
+    environment: &service-env
+      DATABASE_URL: postgres://biocohort:biocohort@postgres:5432/biocohort?sslmode=disable
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: biocohort
+      MINIO_SECRET_KEY: biocohort123
+      MINIO_BUCKET: raw-ingestion
+      MINIO_USE_SSL: "false"
+      INGESTION_SERVICE_URL: http://ingestion-service:8081
+      COHORT_SERVICE_URL: http://cohort-service:8082
+      ANALYTICS_SERVICE_URL: http://analytics-service:8083
+      QUALITY_SERVICE_URL: http://quality-service:8084
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  cohort-service:
+    build:
+      context: .
+      dockerfile: services/cohort-service/Dockerfile
+    environment: *service-env
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
+    environment: *service-env
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  quality-service:
+    build:
+      context: .
+      dockerfile: services/quality-service/Dockerfile
+    environment: *service-env
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    environment: *service-env
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ingestion-service
+      - cohort-service
+      - analytics-service
+      - quality-service
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+
+volumes:
+  postgres-data:
+  minio-data:

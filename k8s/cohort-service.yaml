@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: cohort-service, namespace: biocohort }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: cohort-service } }
+  template:
+    metadata: { labels: { app: cohort-service } }
+    spec:
+      containers:
+        - name: cohort-service
+          image: biocohort/cohort-service:latest
+          ports: [{ containerPort: 8082 }]
+          envFrom:
+            - configMapRef: { name: biocohort-config }
+            - secretRef: { name: biocohort-secrets }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: cohort-service, namespace: biocohort }
+spec:
+  selector: { app: cohort-service }
+  ports: [{ port: 8082, targetPort: 8082 }]
